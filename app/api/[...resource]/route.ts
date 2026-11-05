@@ -1,6 +1,5 @@
 import { getApi, requestApi, ApiMutationError } from "@/lib/api/server";
 import { validateInput } from "@/lib/api/validation";
-import type { Meal, User, MealPlan } from "@/lib/api/types";
 
 async function handle(request: Request, context: { params: Promise<{ resource: string[] }> }) {
   const { resource: parts } = await context.params;
@@ -20,11 +19,9 @@ async function handle(request: Request, context: { params: Promise<{ resource: s
   if (!allowed) return Response.json({ message: "Operação não encontrada." }, { status: 404 });
   try {
     if (method === "GET") {
-      const query = new URL(request.url).search;
-      const result = await getApi<(Meal | User | MealPlan)[]>(`/${resource}${query}`, request.signal);
-      if (!id) return Response.json(result);
-      const item = result.find(item => String(item.id) === id);
-      return item ? Response.json(item) : Response.json({ message: "Recurso não encontrado." }, { status: 404 });
+      const query = id ? "" : new URL(request.url).search;
+      const result = await getApi(`/${parts.join("/")}${query}`, request.signal);
+      return Response.json(result);
     }
     let body: Record<string, unknown> | undefined;
     if (method !== "DELETE") {

@@ -24,6 +24,7 @@ export async function requestApi<T>(path: string, method: string, body?: Record<
     throw new ApiMutationError(503, { message: "API não configurada. Defina API_BASE_URL com uma URL HTTP ou HTTPS válida no ambiente do servidor." });
   }
   let response: Response;
+  let text: string;
   try {
     response = await fetch(`${base.href.replace(/\/+$/, "")}/v1${path}`, {
       method, cache: "no-store",
@@ -31,13 +32,22 @@ export async function requestApi<T>(path: string, method: string, body?: Record<
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
     });
+    text = await response.text();
   } catch {
     throw new ApiMutationError(503, { message: method === "GET" ? "Backend indisponível." : "Não foi possível confirmar o resultado. Consulte os dados antes de repetir.", uncertain: method !== "GET" });
   }
-  const text = await response.text();
   let result: unknown = undefined;
   try { if (text) result = JSON.parse(text); } catch { /* Handled below. */ }
-  if (!response.ok) throw new ApiMutationError([400,404,409].includes(response.status) ? response.status : 503, result && typeof result === "object" && !Array.isArray(result) ? result as Record<string, unknown> : { message: "Não foi possível concluir a operação." });
+  if (!response.ok) {
+    if (method !== "GET" && response.status >= 500) {
+      throw new ApiMutationError(503, { message: "Não foi possível confirmar o resultado. Consulte os dados antes de repetir.", uncertain: true });
+    }
+    const status = [400, 404, 409].includes(response.status) ? response.status : 503;
+    const fields = result && typeof result === "object" && !Array.isArray(result)
+      ? result as Record<string, unknown>
+      : { message: "Não foi possível concluir a operação." };
+    throw new ApiMutationError(status, fields);
+  }
   if (text && result === undefined) throw new ApiMutationError(503, { message: "Resposta inesperada do backend.", uncertain: method !== "GET" });
   return result as T;
 }

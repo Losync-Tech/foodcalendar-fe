@@ -43,6 +43,20 @@ const missing = () => new ApiMutationError(404, { message: "Recurso não encontr
 export function getMockResponse(input: string): unknown {
   const url = new URL(input, "http://mock.local");
   const store = load();
+  const [, resource, id] = url.pathname.split("/");
+  if (id) {
+    if (resource === "users") {
+      const user = store.users.find(item => String(item.id) === id);
+      if (user) return user;
+    } else if (resource === "meals") {
+      const meal = store.meals.find(item => String(item.id) === id);
+      if (meal) return meal;
+    } else if (resource === "meal-plans") {
+      const plan = store.plans.find(item => String(item.id) === id);
+      if (plan) return expand(store, plan);
+    }
+    throw missing();
+  }
   if (url.pathname === "/users") return store.users;
   if (url.pathname === "/meals") {
     const name = (url.searchParams.get("name") ?? "").trim().toLocaleLowerCase("pt-BR");
@@ -57,7 +71,7 @@ export function getMockResponse(input: string): unknown {
       const weekday = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"][parsed.getDay()];
       plans = plans.filter(p => p.startDate <= date && p.endDate >= date && p.targetDays.includes(weekday));
     } else if (start && end) plans = plans.filter(p => p.startDate <= end && p.endDate >= start);
-    if ((date || (start && end)) && userId) plans = plans.filter(p => String(p.userId) === userId);
+    if (userId) plans = plans.filter(p => String(p.userId) === userId);
     return plans.map(p => expand(store, p));
   }
   throw missing();

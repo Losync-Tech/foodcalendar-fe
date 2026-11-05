@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
+import { ClientApiError, mutate } from "@/lib/api/client";
+import type { Meal } from "@/lib/api/types";
 import type { MealFormProps } from "./types";
 
 export function MealForm({ meal, onSaved, onCancel, onBusyChange }: MealFormProps) {
@@ -9,10 +11,12 @@ export function MealForm({ meal, onSaved, onCancel, onBusyChange }: MealFormProp
   const [name, setName] = useState(meal.name);
   const [description, setDescription] = useState(meal.description);
   const [pending, setPending] = useState(false);
+  const [uncertain, setUncertain] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending || uncertain) return;
     const nextErrors: Record<string, string> = {};
     if (!name.trim()) nextErrors.name = "Informe o nome da refeição.";
     else if (name.trim().length > 255) nextErrors.name = "Use no máximo 255 caracteres.";
@@ -26,22 +30,23 @@ export function MealForm({ meal, onSaved, onCancel, onBusyChange }: MealFormProp
     setPending(true);
     onBusyChange(true);
     try {
-      const response = await fetch(`/api/meals/${meal.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(changes),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        const fields: Record<string, string> = {};
-        for (const field of ["name", "description"]) if (typeof data[field] === "string") fields[field] = data[field];
-        setErrors(Object.keys(fields).length ? fields : { form: typeof data.message === "string" ? data.message : "Não foi possível salvar a refeição." });
-        return;
+      const data = await mutate<Meal>(`/meals/${meal.id}`, "PATCH", changes);
+      if (typeof data?.name !== "string" || typeof data?.description !== "string" || data.id !== meal.id) {
+        throw new ClientApiError(503, { message: "Resposta inesperada. Confira os dados antes de repetir.", uncertain: true });
       }
-      if (typeof data.name !== "string" || typeof data.description !== "string" || data.id !== meal.id) throw new Error("Invalid response");
       onSaved(data);
-    } catch {
-      setErrors({ form: "Não foi possível salvar. Verifique a conexão e tente novamente." });
+    } catch (error) {
+      if (error instanceof ClientApiError) {
+        const fields: Record<string, string> = {};
+        for (const field of ["name", "description"]) {
+          const message = error.fields[field];
+          if (typeof message === "string") fields[field] = message;
+        }
+        if (error.fields.uncertain) setUncertain(true);
+        setErrors(Object.keys(fields).length ? fields : { form: error.message });
+      } else {
+        setErrors({ form: "Não foi possível salvar a refeição." });
+      }
     } finally {
       setPending(false);
       onBusyChange(false);
@@ -63,7 +68,7 @@ export function MealForm({ meal, onSaved, onCancel, onBusyChange }: MealFormProp
     {errors.form && <p role="alert" className="text-sm text-danger">{errors.form}</p>}
     <div className="flex justify-end gap-2">
       <button type="button" onClick={onCancel} disabled={pending} className="rounded-control border border-border px-4 py-2 text-sm disabled:opacity-50">Cancelar</button>
-      <button type="submit" disabled={pending} className="rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">{pending ? "Salvando…" : "Salvar alterações"}</button>
+      <button type="submit" disabled={pending || uncertain} className="rounded-control bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:opacity-50">{pending ? "Salvando…" : "Salvar alterações"}</button>
     </div>
   </form>;
 }

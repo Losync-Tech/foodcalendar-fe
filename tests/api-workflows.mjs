@@ -29,10 +29,16 @@ try {
   app = await application({ API_BASE_URL: backend.url + "/" });
   assert.equal((await api(app.base, "/health")).mode, "api");
   assert.equal((await api(app.base, "/users"))[0].id, 42);
-  assert.equal((await api(app.base, "/users/42")).name, "External user");
+  for (const [endpoint, id] of [["/users/42", 42], ["/meals/77", 77], ["/meal-plans/91", 91]]) {
+    assert.equal((await api(app.base, endpoint)).id, id);
+    assert.deepEqual(backend.calls.at(-1), { method: "GET", url: "/v1" + endpoint, body: undefined });
+  }
+  assert.equal((await api(app.base, "/users/99", "GET", undefined, 404)).message, "External resource not found");
   await api(app.base, "/users", "POST", { name: " " }, 400);
   assert.equal((await api(app.base, "/users", "POST", { name: "API user" }, 201)).id, 43);
   assert.deepEqual(backend.calls.at(-1), { method: "POST", url: "/v1/users", body: { name: "API user" } });
+  const interrupted = await api(app.base, "/users", "POST", { name: "Interrupted response" }, 503);
+  assert.equal(interrupted.uncertain, true);
   await api(app.base, "/users/42", "PUT", { name: "Updated" });
   await api(app.base, "/meals/77", "PATCH", { description: "Updated" });
   await api(app.base, "/meal-plans/clone", "POST", { userId: 42, originalStartDate: "2027-01-04", originalEndDate: "2027-01-10", newStartDate: "2027-01-11", newEndDate: "2027-01-17" }, 201);
@@ -68,6 +74,16 @@ try {
   console.log("PASS: external API reads, writes, validation, empty responses, errors, unavailable API without fallback, automatic production demo mode and invalid configuration.");
 } finally {
   if (app) await app.stop();
+    const allPlans = await api(app.base, "/meal-plans");
+    const personPlans = await api(app.base, "/meal-plans?userId=1");
+    assert.ok(personPlans.length > 0 && personPlans.length < allPlans.length);
+    assert.deepEqual(personPlans, allPlans.filter(plan => plan.user.id === 1));
+    assert.deepEqual(await api(app.base, "/meal-plans?userId=999"), []);
+    const plan = personPlans[0];
+    assert.equal((await api(app.base, "/users/1")).id, 1);
+    assert.equal((await api(app.base, "/meals/" + plan.meal.id)).id, plan.meal.id);
+    assert.deepEqual(await api(app.base, "/meal-plans/" + plan.id), plan);
+    await api(app.base, "/meal-plans/999999", "GET", undefined, 404);
   if (backend) await backend.close();
   fs.rmSync(demoDirectory, { recursive: true, force: true });
 }
