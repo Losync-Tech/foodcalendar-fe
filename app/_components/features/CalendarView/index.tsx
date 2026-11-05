@@ -17,9 +17,6 @@ const headings = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 export async function CalendarView({ searchParams }: CalendarViewProps) {
   const params = await searchParams;
-  let users: User[];
-  try { users = await getApi<User[]>("/users"); }
-  catch { return <p role="status" className="rounded-card bg-surface p-6 text-muted-foreground">Calendário indisponível no momento.</p>; }
   const today = todayInSaoPaulo();
   const date = typeof params.date === "string" && parseDate(params.date) ? params.date : today;
   await connection();
@@ -29,11 +26,23 @@ export async function CalendarView({ searchParams }: CalendarViewProps) {
   const filterTypes = [...new Set(rawTypes)].filter((type): type is MealType => mealCategories.some(category => category.type === type));
   const days = view === "day" ? [date] : view === "week" ? getWeekDays(date) : getMonthDays(date);
   const targets = users.filter(user => !person || String(user.id) === person);
-  const responses = await Promise.allSettled(targets.map(user => getApi<MealPlan[]>(`/meal-plans?userId=${user.id}&startDate=${days[0]}&endDate=${days.at(-1)}`)));
-  const plans = responses.flatMap(result => result.status === "fulfilled" ? result.value : []);
-  const incomplete = responses.some(result => result.status === "rejected");
+  const targetIds = new Set(targets.map(user => user.id));
+  const loadedPlans = plansResult.status === "fulfilled" && Array.isArray(plansResult.value) ? plansResult.value : null;
+  const plans = loadedPlans?.filter(plan => targetIds.has(plan.user.id)) ?? [];
+  const incomplete = targets.length > 0 && loadedPlans === null;
   const weeks = Array.from({ length: days.length / 7 }, (_, index) => days.slice(index * 7, index * 7 + 7));
 
+  const query = new URLSearchParams(view === "day" ? { date } : { startDate: days[0], endDate: days[days.length - 1] });
+  const validPerson = !person || /^[1-9]\d*$/.test(person);
+  if (person && validPerson) query.set("userId", person);
+  const [usersResult, plansResult] = await Promise.allSettled([
+    getApi<User[]>("/users"),
+    validPerson ? getApi<MealPlan[]>(`/meal-plans?${query}`) : Promise.resolve([]),
+  ]);
+  if (usersResult.status === "rejected" || !Array.isArray(usersResult.value)) {
+    return <p role="status" className="rounded-card bg-surface p-6 text-muted-foreground">Calendário indisponível no momento.</p>;
+  }
+  const users = usersResult.value;
   function href(day: string, userId = person, nextView: string = view) {
     const query = new URLSearchParams({ date: day, view: nextView });
     if (userId) query.set("userId", userId);
@@ -65,13 +74,13 @@ export async function CalendarView({ searchParams }: CalendarViewProps) {
         <Link href={href(next)} aria-label={view === "month" ? "Próximo mês" : view === "week" ? "Próxima semana" : "Próximo dia"} className="rounded-control border border-border bg-surface px-3 py-2">→</Link>
       </nav>
     </div>
-    {incomplete && <p role="status" className="text-sm text-warning">Parte dos dados está indisponível. Os dias podem estar incompletos.</p>}
+    {incomplete && <p role="status" className="text-sm text-warning">Os planos deste período estão indisponíveis no momento.</p>}
     {targets.length === 0 && <p role="status" className="text-sm text-muted-foreground">Nenhuma pessoa encontrada para este filtro.</p>}
     <AnimatedSurface identity={`${view}:${date}:${person ?? "both"}`} className={`grid items-start gap-bento ${view === "month" ? "2xl:grid-cols-[minmax(0,1fr)_20rem]" : ""}`}>
       <section aria-labelledby="month-heading" className="min-w-0 overflow-hidden rounded-card border border-border bg-surface shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
           <h2 id="month-heading" className="text-lg font-semibold capitalize">{title}</h2>
-          <span className="text-sm text-muted-foreground">{view === "day" ? `${selectedPlans.length} refeições` : "Selecione um dia para ver as refeições"}</span>
+          <span className="text-sm text-muted-foreground">{view === "day" ? (incomplete ? "Dados indisponíveis" : `${selectedPlans.length} refeições`) : "Selecione um dia para ver as refeições"}</span>
         </div>
         {view === "month" ? <div role="region" aria-label="Calendário mensal, rolável em telas pequenas" tabIndex={0} className="overflow-x-auto">
           <table className="w-full min-w-[42rem] table-fixed border-separate border-spacing-0">
@@ -86,7 +95,7 @@ export async function CalendarView({ searchParams }: CalendarViewProps) {
       {view === "month" && <aside aria-labelledby="selected-day-heading" className="rounded-card border border-border bg-surface p-5 shadow-card">
         <p className="text-sm capitalize text-muted-foreground">{formatDate(date, { weekday: "long" })}</p>
         <h2 id="selected-day-heading" className="mt-1 text-lg font-semibold">{formatDate(date, { day: "numeric", month: "long" })}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{selectedPlans.length} refeições{incomplete ? " · dados parciais" : ""}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{incomplete ? "Dados indisponíveis" : `${selectedPlans.length} refeições`}</p>
         <DayMeals types={filterTypes} plans={selectedPlans} date={date} incomplete={incomplete} />
         <Link href={href(date, person, "week")} className="mt-6 inline-block rounded-control text-sm font-medium text-primary">Ver semana →</Link>
       </aside>}

@@ -31,7 +31,7 @@ function datesForQuery(query: string, today: string) {
   return suggestions.filter((item) => normalize(`${item.label} ${formatDate(item.date)}`).includes(normalize(query)));
 }
 
-export function Search({ date, userId }: SearchProps) {
+export function Search({ date, userId, navigation, onRetryDay }: SearchProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -42,8 +42,13 @@ export function Search({ date, userId }: SearchProps) {
   const [today, setToday] = useState("");
   const normalizedQuery = query.trim();
   const selectedDate = date || today;
-  const resultKey = normalizedQuery ? `query:${normalizedQuery}` : `day:${selectedDate}:${userId ?? ""}`;
-  const current = response?.key === resultKey ? response : null;
+  const resultKey = `query:${normalizedQuery}`;
+  const dayResults = navigation && {
+    meals: [...new Map(navigation.plans.map(plan => [plan.meal.id, plan.meal])).values()],
+    failed: navigation.status === "unavailable",
+    partial: navigation.status === "partial",
+  };
+  const current = normalizedQuery ? (response?.key === resultKey ? response : null) : dayResults;
   const dates = datesForQuery(query, today);
   if (!query.trim() && date && date !== today && parseDate(date)) dates.unshift({ date, label: "Dia selecionado" });
 
@@ -72,30 +77,31 @@ export function Search({ date, userId }: SearchProps) {
 
   useEffect(() => {
     if (!open) return;
-    const unlock = lockPageScroll();
+    return lockPageScroll();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !normalizedQuery) return;
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       const params = new URLSearchParams({ q: normalizedQuery });
-      if (!normalizedQuery) {
-        params.set("date", selectedDate);
-        if (userId) params.set("userId", userId);
-      }
       fetch(`/api/search?${params}`, { signal: controller.signal })
         .then(async (result) => {
           if (!result.ok) throw new Error("Search unavailable");
           return result.json() as Promise<{ meals: Meal[]; partial: boolean }>;
         })
-        .then((data) => setResponse({ key: resultKey, meals: data.meals, failed: false, partial: data.partial }))
+        .then((data) => {
+          if (!controller.signal.aborted) setResponse({ key: resultKey, meals: data.meals, failed: false, partial: data.partial });
+        })
         .catch(() => {
           if (!controller.signal.aborted) setResponse({ key: resultKey, meals: [], failed: true, partial: false });
         });
     }, 250);
     return () => {
-      unlock();
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [open, normalizedQuery, attempt, selectedDate, userId, resultKey]);
+  }, [open, normalizedQuery, attempt, resultKey]);
 
   function dateHref(value: string) {
     const params = new URLSearchParams({ date: value });
@@ -155,7 +161,11 @@ export function Search({ date, userId }: SearchProps) {
             {!normalizedQuery && <p className="mb-3 px-2 text-xs text-muted-foreground">Digite um nome para buscar em todo o catálogo.</p>}
             <div role="status" aria-live="polite">
               {!current && <p className="px-3 py-5 text-sm text-muted-foreground">Buscando refeições…</p>}
-              {current?.failed && <div className="rounded-control bg-surface-muted p-4"><p className="text-sm text-muted-foreground">Não foi possível consultar as refeições. Você ainda pode buscar datas.</p><button type="button" onClick={() => { setResponse(null); setAttempt(attempt + 1); }} className="mt-3 rounded-control text-sm font-medium text-primary">Tentar novamente</button></div>}
+              {current?.failed && <div className="rounded-control bg-surface-muted p-4"><p className="text-sm text-muted-foreground">Não foi possível consultar as refeições. Você ainda pode buscar datas.</p><button type="button" onClick={() => {
+                if (!normalizedQuery) { onRetryDay(); return; }
+                setResponse(null);
+                setAttempt(value => value + 1);
+              }} className="mt-3 rounded-control text-sm font-medium text-primary">Tentar novamente</button></div>}
               {current && !current.failed && current.meals.length === 0 && <p className="px-3 py-5 text-sm text-muted-foreground">{normalizedQuery ? "Nenhuma refeição encontrada." : "Nenhuma refeição planejada para este dia."}</p>}
             </div>
             {current?.partial && <p role="status" className="mb-2 px-3 text-xs text-warning">Parte das refeições do dia está indisponível.</p>}

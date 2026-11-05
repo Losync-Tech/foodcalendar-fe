@@ -46,10 +46,25 @@ try {
   await api(app.base, "/demo/reset", "POST", {}, 404);
   await api(app.base, "/users/99", "PUT", { name: "Missing" }, 404);
   await api(app.base, "/meals?name=invalid-json", "GET", undefined, 503);
+  const date = "2027-01-04";
+  const beforeNavigation = backend.calls.length;
+  assert.equal((await api(app.base, "/navigation?date=" + date)).status, "ready");
+  assert.deepEqual(
+    backend.calls.slice(beforeNavigation).map(call => call.url).sort(),
+    ["/v1/meal-plans?date=" + date, "/v1/users"],
+  );
   for (const view of ["day", "week", "month"]) {
-    const response = await fetch(app.base + "/?view=" + view);
+    const beforeCalendar = backend.calls.length;
+    const response = await fetch(app.base + "/?view=" + view + "&date=" + date);
     assert.equal(response.status, 200);
     assert.ok((await response.text()).includes("Adicionar ao calendário"));
+    const calls = backend.calls.slice(beforeCalendar).map(call => new URL(call.url, backend.url));
+    const planCalls = calls.filter(call => call.pathname === "/v1/meal-plans");
+    assert.equal(planCalls.length, 1);
+    const filters = planCalls[0].searchParams;
+    assert.equal(filters.has("userId"), false);
+    if (view === "day") assert.equal(filters.get("date"), date);
+    else assert.ok(filters.has("startDate") && filters.has("endDate"));
   }
   await backend.close(); backend = null;
   await api(app.base, "/users", "GET", undefined, 503);
@@ -59,6 +74,16 @@ try {
     assert.equal((await api(app.base, "/health")).mode, "mock");
     assert.equal((await api(app.base, "/users")).length, 2);
     assert.equal((await api(app.base, "/meals")).length >= 20, true);
+    const allPlans = await api(app.base, "/meal-plans");
+    const personPlans = await api(app.base, "/meal-plans?userId=1");
+    assert.ok(personPlans.length > 0 && personPlans.length < allPlans.length);
+    assert.deepEqual(personPlans, allPlans.filter(plan => plan.user.id === 1));
+    assert.deepEqual(await api(app.base, "/meal-plans?userId=999"), []);
+    const plan = personPlans[0];
+    assert.equal((await api(app.base, "/users/1")).id, 1);
+    assert.equal((await api(app.base, "/meals/" + plan.meal.id)).id, plan.meal.id);
+    assert.deepEqual(await api(app.base, "/meal-plans/" + plan.id), plan);
+    await api(app.base, "/meal-plans/999999", "GET", undefined, 404);
     const created = await api(app.base, "/meals", "POST", { name: "Demo creation", description: "Demo description" }, 201);
     assert.ok((await api(app.base, "/meals")).some(meal => meal.id === created.id));
     const html = await (await fetch(app.base + "/")).text();
@@ -74,16 +99,6 @@ try {
   console.log("PASS: external API reads, writes, validation, empty responses, errors, unavailable API without fallback, automatic production demo mode and invalid configuration.");
 } finally {
   if (app) await app.stop();
-    const allPlans = await api(app.base, "/meal-plans");
-    const personPlans = await api(app.base, "/meal-plans?userId=1");
-    assert.ok(personPlans.length > 0 && personPlans.length < allPlans.length);
-    assert.deepEqual(personPlans, allPlans.filter(plan => plan.user.id === 1));
-    assert.deepEqual(await api(app.base, "/meal-plans?userId=999"), []);
-    const plan = personPlans[0];
-    assert.equal((await api(app.base, "/users/1")).id, 1);
-    assert.equal((await api(app.base, "/meals/" + plan.meal.id)).id, plan.meal.id);
-    assert.deepEqual(await api(app.base, "/meal-plans/" + plan.id), plan);
-    await api(app.base, "/meal-plans/999999", "GET", undefined, 404);
   if (backend) await backend.close();
   fs.rmSync(demoDirectory, { recursive: true, force: true });
 }

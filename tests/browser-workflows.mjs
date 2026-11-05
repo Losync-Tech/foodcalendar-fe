@@ -23,9 +23,24 @@ try {
   const page = await browser.newPage();
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
+  const navigation = page.waitForResponse(response => new URL(response.url()).pathname === "/api/navigation");
   await page.goto(base + "/refeicoes");
   await page.getByRole("button", { name: "External meal", exact: true }).waitFor();
+  await navigation;
   assert.equal(await page.getByText("Modo demonstração", { exact: false }).count(), 0);
+
+  const searchRequests = [];
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/search") searchRequests.push(url.searchParams.get("q"));
+  });
+  await page.getByRole("button", { name: "Buscar refeições e datas" }).click();
+  const search = page.locator("#global-search");
+  await search.getByText("Nenhuma refeição planejada para este dia.").waitFor();
+  await search.getByRole("searchbox").fill("External");
+  await search.getByRole("button", { name: /External meal/ }).waitFor();
+  assert.deepEqual(searchRequests, ["External"]);
+  await search.getByRole("button", { name: "Fechar pesquisa" }).click();
   await page.getByRole("button", { name: "Nova refeição", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Nova refeição", exact: true });
   await dialog.getByLabel("Nome", { exact: true }).fill("API meal");

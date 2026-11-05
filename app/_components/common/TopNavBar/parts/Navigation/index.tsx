@@ -36,7 +36,9 @@ export function Navigation() {
         if (!response.ok) throw new Error("Navigation unavailable");
         return response.json() as Promise<NavigationData>;
       })
-      .then((data) => setResult({ key, data }))
+      .then((data) => {
+        if (!controller.signal.aborted) setResult({ key, data });
+      })
       .catch(() => {
         if (!controller.signal.aborted) setResult({ key, data: { users: [], plans: [], status: "unavailable" } });
       });
@@ -54,7 +56,10 @@ export function Navigation() {
   return (
     <header className="grid grid-cols-[auto_1fr] items-center gap-x-8 gap-y-3 border-b border-border bg-surface px-4 py-3 sm:px-6 md:grid-cols-[auto_minmax(0,1fr)_auto]">
       <div className="shrink-0">
-        <Search date={date} userId={userId} />
+        <Search date={date} userId={userId} navigation={data} onRetryDay={() => {
+          setResult(null);
+          setRevision(value => value + 1);
+        }} />
       </div>
       <div className="order-last col-span-2 min-w-0 md:order-none md:col-span-1">
         <DayOverview date={date} data={data} userId={userId} />
