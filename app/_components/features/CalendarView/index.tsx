@@ -3,6 +3,7 @@ import { AnimatedSurface } from "../../common/AnimatedSurface";
 import { WorkflowTrigger } from "../../common/Workflow";
 import { DayMeals } from "./parts/DayMeals";
 import Link from "next/link";
+import { connection } from "next/server";
 import { getApi } from "@/lib/api/server";
 import type { MealPlan, User, MealType } from "@/lib/api/types";
 import { formatDate, getMonthDays, getWeekDays, parseDate, shiftDays, shiftMonth, todayInSaoPaulo } from "@/lib/calendar";
@@ -21,6 +22,7 @@ export async function CalendarView({ searchParams }: CalendarViewProps) {
   catch { return <p role="status" className="rounded-card bg-surface p-6 text-muted-foreground">Calendário indisponível no momento.</p>; }
   const today = todayInSaoPaulo();
   const date = typeof params.date === "string" && parseDate(params.date) ? params.date : today;
+  await connection();
   const person = typeof params.userId === "string" ? params.userId : null;
   const view = params.view === "day" || params.view === "week" ? params.view : "month";
   const rawTypes = typeof params.mealTypes === "string" ? params.mealTypes.split(",") : typeof params.mealType === "string" ? [params.mealType] : [];
