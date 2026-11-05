@@ -22,9 +22,8 @@ export async function MealResults({ searchParams }: MealResultsProps) {
       <div className="grid gap-bento sm:grid-cols-2 xl:grid-cols-3">
         {meals.map((meal) => (
           <article key={meal.id}>
-            <MealTrigger meal={meal} ariaLabel={meal.name} className={`group block h-full w-full rounded-card border bg-surface p-6 text-left shadow-card hover:border-primary ${selected ? "border-primary" : "border-border"}`}>
+            <MealTrigger meal={meal} ariaLabel={meal.name} className={`group flex h-full w-full items-start justify-start rounded-card border bg-surface p-6 text-left shadow-card hover:border-primary ${selected ? "border-primary" : "border-border"}`}>
               <span role="heading" aria-level={2} className="block text-lg font-semibold group-hover:text-primary">{meal.name}</span>
-              <span className="mt-2 block whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{meal.description}</span>
             </MealTrigger>
           </article>
         ))}
