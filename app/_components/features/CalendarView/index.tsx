@@ -4,6 +4,7 @@ import { WorkflowTrigger } from "../../common/Workflow";
 import { DayMeals } from "./parts/DayMeals";
 import Link from "next/link";
 import { connection } from "next/server";
+import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react/dist/ssr";
 import { getApi } from "@/lib/api/server";
 import type { MealPlan, User, MealType } from "@/lib/api/types";
 import { formatDate, getMonthDays, getWeekDays, parseDate, shiftDays, shiftMonth, todayInSaoPaulo } from "@/lib/calendar";
@@ -12,26 +13,24 @@ import { DayCell } from "./parts/DayCell";
 import { Schedule } from "./parts/Schedule";
 import type { CalendarViewProps } from "./types";
 
+function formatWeekDay(date: string) {
+  return formatDate(date, { day: "2-digit", month: "2-digit" });
+}
+
 const weekdays = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const periodArrowClass = "inline-grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-surface-muted hover:text-foreground";
 const headings = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 export async function CalendarView({ searchParams }: CalendarViewProps) {
+  await connection();
   const params = await searchParams;
   const today = todayInSaoPaulo();
   const date = typeof params.date === "string" && parseDate(params.date) ? params.date : today;
-  await connection();
   const person = typeof params.userId === "string" ? params.userId : null;
   const view = params.view === "day" || params.view === "week" ? params.view : "month";
   const rawTypes = typeof params.mealTypes === "string" ? params.mealTypes.split(",") : typeof params.mealType === "string" ? [params.mealType] : [];
   const filterTypes = [...new Set(rawTypes)].filter((type): type is MealType => mealCategories.some(category => category.type === type));
   const days = view === "day" ? [date] : view === "week" ? getWeekDays(date) : getMonthDays(date);
-  const targets = users.filter(user => !person || String(user.id) === person);
-  const targetIds = new Set(targets.map(user => user.id));
-  const loadedPlans = plansResult.status === "fulfilled" && Array.isArray(plansResult.value) ? plansResult.value : null;
-  const plans = loadedPlans?.filter(plan => targetIds.has(plan.user.id)) ?? [];
-  const incomplete = targets.length > 0 && loadedPlans === null;
-  const weeks = Array.from({ length: days.length / 7 }, (_, index) => days.slice(index * 7, index * 7 + 7));
-
   const query = new URLSearchParams(view === "day" ? { date } : { startDate: days[0], endDate: days[days.length - 1] });
   const validPerson = !person || /^[1-9]\d*$/.test(person);
   if (person && validPerson) query.set("userId", person);
@@ -43,6 +42,13 @@ export async function CalendarView({ searchParams }: CalendarViewProps) {
     return <p role="status" className="rounded-card bg-surface p-6 text-muted-foreground">Calendário indisponível no momento.</p>;
   }
   const users = usersResult.value;
+  const targets = users.filter(user => !person || String(user.id) === person);
+  const targetIds = new Set(targets.map(user => user.id));
+  const loadedPlans = plansResult.status === "fulfilled" && Array.isArray(plansResult.value) ? plansResult.value : null;
+  const plans = loadedPlans?.filter(plan => targetIds.has(plan.user.id)) ?? [];
+  const incomplete = targets.length > 0 && loadedPlans === null;
+  const weeks = Array.from({ length: days.length / 7 }, (_, index) => days.slice(index * 7, index * 7 + 7));
+
   function href(day: string, userId = person, nextView: string = view) {
     const query = new URLSearchParams({ date: day, view: nextView });
     if (userId) query.set("userId", userId);
@@ -68,10 +74,18 @@ export async function CalendarView({ searchParams }: CalendarViewProps) {
       <nav aria-label="Visão do calendário" className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
         {[{ value: "day", label: "Dia" }, { value: "week", label: "Semana" }, { value: "month", label: "Mês" }].map(option => <Link key={option.value} href={href(date, person, option.value)} aria-current={view === option.value ? "page" : undefined} className={`rounded-full px-4 py-1.5 text-sm ${view === option.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-surface-muted"}`}>{option.label}</Link>)}
       </nav>
-      <nav aria-label="Período do calendário" className="flex items-center gap-2">
-        <Link href={href(previous)} aria-label={view === "month" ? "Mês anterior" : view === "week" ? "Semana anterior" : "Dia anterior"} className="rounded-control border border-border bg-surface px-3 py-2">←</Link>
-        <time dateTime={date} className="px-3 py-2 text-sm font-medium tabular-nums text-foreground">{formatDate(date, { day: "2-digit", month: "2-digit", year: "numeric" })}</time>
-        <Link href={href(next)} aria-label={view === "month" ? "Próximo mês" : view === "week" ? "Próxima semana" : "Próximo dia"} className="rounded-control border border-border bg-surface px-3 py-2">→</Link>
+      <nav aria-label="Período do calendário" className="flex items-center gap-1">
+        <Link href={href(previous)} aria-label={view === "month" ? "Mês anterior" : view === "week" ? "Semana anterior" : "Dia anterior"} className={periodArrowClass}><CaretLeftIcon size={16} aria-hidden="true" /></Link>
+        <span className="px-1 text-sm font-medium tabular-nums text-foreground">
+          {view === "month" ? (
+            <time dateTime={date.slice(0, 7)} className="capitalize">{formatDate(date, { month: "long" })}</time>
+          ) : view === "week" ? (
+            <><time dateTime={days[0]}>{formatWeekDay(days[0])}</time> a <time dateTime={days[6]}>{formatWeekDay(days[6])}</time></>
+          ) : (
+            <time dateTime={date}>{formatDate(date, { day: "2-digit", month: "2-digit", year: "numeric" })}</time>
+          )}
+        </span>
+        <Link href={href(next)} aria-label={view === "month" ? "Próximo mês" : view === "week" ? "Próxima semana" : "Próximo dia"} className={periodArrowClass}><CaretRightIcon size={16} aria-hidden="true" /></Link>
       </nav>
     </div>
     {incomplete && <p role="status" className="text-sm text-warning">Os planos deste período estão indisponíveis no momento.</p>}
