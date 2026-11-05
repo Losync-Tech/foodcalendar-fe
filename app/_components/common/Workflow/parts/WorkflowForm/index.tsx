@@ -23,7 +23,7 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   const isDelete = kind.startsWith("delete-");
   const [users, setUsers] = useState<User[]>([]);
   const [meals, setMeals] = useState<Meal[]>([]);
-  const [plans, setPlans] = useState<MealPlan[]>([]);
+  const [clonePlans, setClonePlans] = useState<{ key: string; plans: MealPlan[] | null } | null>(null);
   const [loading, setLoading] = useState(isPlan || kind === "clone");
   const [loadError, setLoadError] = useState(false);
   const [name, setName] = useState(request.user?.name ?? "");
@@ -50,11 +50,48 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   useEffect(() => {
     if (!(isPlan || kind === "clone")) return;
     const controller = new AbortController();
-    Promise.all(["users","meals","meal-plans"].map(resource => fetch("/api/" + resource, { signal: controller.signal }).then(response => { if (!response.ok) throw new Error("Options unavailable"); return response.json(); })))
-      .then(([people, options, periods]) => { setUsers(people); setMeals(options); setPlans(periods); setLoading(false); })
+    async function load<T>(path: string): Promise<T> {
+      const response = await fetch(`/api/${path}`, { signal: controller.signal });
+      if (!response.ok) throw new Error("Options unavailable");
+      return response.json();
+    }
+    Promise.all([
+      kind === "edit-plan" && plan ? Promise.resolve([plan.user]) : load<User[]>("users"),
+      isPlan ? load<Meal[]>("meals") : Promise.resolve([]),
+    ])
+      .then(([people, options]) => {
+        if (controller.signal.aborted) return;
+        setUsers(people);
+        setMeals(options);
+        setLoading(false);
+      })
       .catch(() => { if (!controller.signal.aborted) { setLoadError(true); setLoading(false); } });
     return () => controller.abort();
-  }, [isPlan, kind]);
+  }, [isPlan, kind, plan]);
+
+  const cloneQuery = kind !== "clone" || people.length === 0
+    ? null
+    : people.length === 1 ? `?${new URLSearchParams({ userId: people[0] })}` : "";
+  useEffect(() => {
+    if (cloneQuery === null) return;
+    const controller = new AbortController();
+    fetch(`/api/meal-plans${cloneQuery}`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error("Periods unavailable");
+        return response.json() as Promise<MealPlan[]>;
+      })
+      .then(plans => {
+        if (!controller.signal.aborted) setClonePlans({ key: cloneQuery, plans });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setClonePlans({ key: cloneQuery, plans: null });
+      });
+    return () => controller.abort();
+  }, [cloneQuery]);
+  const currentClonePlans = clonePlans?.key === cloneQuery ? clonePlans : null;
+  const periodsLoading = cloneQuery !== null && !currentClonePlans;
+  const periodsFailed = currentClonePlans?.plans === null;
+  const plans = currentClonePlans?.plans ?? [];
 
   const finalEnd = repeat || kind === "clone" ? end : start;
   const singleDay = parseDate(start);
@@ -94,7 +131,7 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || uncertain) return;
+    if (pending || uncertain || periodsLoading || periodsFailed) return;
     setErrors({});
     if ((kind === "user" || kind === "edit-user" || kind === "meal") && (!name.trim() || name.length > 255 || (kind === "meal" && !description.trim()))) { setErrors({ form: "Preencha os campos obrigatórios; o nome deve ter até 255 caracteres." }); return; }
     if ((isPlan || kind === "clone") && (!people.length || !parseDate(start) || !parseDate(finalEnd) || start > finalEnd)) { setErrors({ form: "Selecione ao menos uma pessoa e um período válido." }); return; }
@@ -125,8 +162,8 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
         }
         setSuccessful(completed);
         setSuccessDate(start);
-        onChanged();
         if (failures.length) {
+          if (completed.length > successful.length || ambiguous) onChanged();
           setUncertain(ambiguous);
           setErrors({ form: (completed.length ? completed.length + " pessoa(s) concluída(s). " : "") + failures.join(" · ") + (ambiguous ? " Confira o calendário antes de repetir." : " Ao reenviar, apenas as pessoas que falharam serão processadas.") });
           return;
@@ -144,6 +181,8 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   if (done) return <div className="space-y-4 p-5"><p role="status" className="text-sm text-success">Operação concluída.</p>{(isPlan || kind === "clone") && <Link onClick={onClose} href={`/?date=${successDate}&view=week${people.length === 1 ? "&userId=" + people[0] : ""}`} className="block rounded-control text-sm font-medium text-primary">Ver no calendário →</Link>}<button type="button" onClick={onClose} className={secondary}>Concluir</button></div>;
   return <form onSubmit={submit} className="space-y-4 p-5">
     {loading && <p role="status" className="text-sm text-muted-foreground">Carregando opções…</p>}
+    {periodsLoading && <p role="status" className="text-sm text-muted-foreground">Carregando períodos…</p>}
+    {periodsFailed && <p role="alert" className="text-sm text-danger">Não foi possível carregar os períodos. Feche e abra o formulário para tentar novamente.</p>}
     {loadError && <p role="alert" className="text-sm text-danger">Não foi possível carregar as opções. Feche e abra o formulário para tentar novamente.</p>}
     <fieldset disabled={frozen || loading || loadError || uncertain} className="space-y-4 disabled:opacity-70">
       {(kind === "user" || kind === "edit-user" || kind === "meal") && label("name", "Nome", <input id={id+"name"} className={inputClass} value={name} onChange={event => setName(event.target.value)} placeholder={kind === "meal" ? "Ex.: Pão com ovos mexidos" : "Ex.: Ana"} maxLength={255} required autoFocus />)}
@@ -161,10 +200,10 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
           {kind === "edit-plan" && <p className="text-xs text-warning">A edição afeta toda a recorrência deste planejamento. A pessoa não pode ser alterada.</p>}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={repeat} onChange={event => setRepeat(event.target.checked)} />Repetir em um período</label>
         </>}
-        {kind === "clone" && <>{label("origin", "Período de origem", <select id={id+"origin"} className={inputClass} value={origin} onChange={event => setOrigin(event.target.value)} required><option value="">Selecione uma vigência cadastrada</option>{periods.map(period => <option key={period} value={period}>{period.split("|").map(date => formatDate(date)).join(" – ")}</option>)}</select>)}<p className="text-xs text-muted-foreground">{originPlans.length} planos na origem. A cópia mantém as refeições e os dias da semana; não altera os originais.</p></>}
+        {kind === "clone" && <>{label("origin", "Período a ser copiado", <select id={id+"origin"} className={inputClass} value={origin} onChange={event => setOrigin(event.target.value)} required><option value="">Selecione uma vigência cadastrada</option>{periods.map(period => <option key={period} value={period}>{period.split("|").map(date => formatDate(date)).join(" – ")}</option>)}</select>)}<p className="text-xs text-muted-foreground">{originPlans.length} planos na origem. A cópia mantém as refeições e os dias da semana; não altera os originais.</p></>}
         <div className="grid grid-cols-2 gap-3">
-          {label("startDate", kind === "clone" ? "Início do destino" : "Data inicial", <input id={id+"startDate"} type="date" className={inputClass} value={start} onChange={event => setStart(event.target.value)} required />)}
-          {(repeat || kind === "clone") && label("endDate", kind === "clone" ? "Fim do destino" : "Data final", <input id={id+"endDate"} type="date" className={inputClass} value={end} min={start} onChange={event => setEnd(event.target.value)} required />)}
+          {label("startDate", kind === "clone" ? "Dia inicial" : "Data inicial", <input id={id+"startDate"} type="date" className={inputClass} value={start} onChange={event => setStart(event.target.value)} required />)}
+          {(repeat || kind === "clone") && label("endDate", kind === "clone" ? "Dia Final" : "Data final", <input id={id+"endDate"} type="date" className={inputClass} value={end} min={start} onChange={event => setEnd(event.target.value)} required />)}
         </div>
         {isPlan && repeat && <fieldset><legend className="mb-2 text-xs font-medium">Dias de repetição</legend><div className="mb-2 flex gap-2"><button type="button" className={secondary} onClick={() => setDays(dayValues.slice(0,5))}>Dias úteis</button><button type="button" className={secondary} onClick={() => setDays(dayValues.slice(5))}>Fim de semana</button><button type="button" className={secondary} onClick={() => setDays(dayValues)}>Todos</button></div><div className="flex flex-wrap gap-2">{dayValues.map((day,index) => <label key={day} className="flex items-center gap-1 text-xs"><input type="checkbox" checked={days.includes(day)} onChange={event => setDays(current => event.target.checked ? [...current,day] : current.filter(value=>value!==day))} />{dayNames[index]}</label>)}</div></fieldset>}
         {isPlan && <PlanSummary mealName={meals.find(meal => String(meal.id) === mealId)?.name} mealType={type} people={users.filter(user => people.includes(String(user.id))).map(user => user.name)} days={finalDays} startDate={start} endDate={finalEnd} repeating={repeat} occurrences={occurrences} />}
@@ -177,6 +216,6 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
     {Object.entries(errors).filter(([key]) => !["form", "message"].includes(key)).map(([key, text]) => <p key={key} className="text-xs text-danger">{text}</p>)}
     {errors.form && <p role="alert" className="text-sm text-danger">{errors.form}</p>}
     {uncertain && <Link href={`/?date=${start}`} onClick={onClose} className="block text-sm text-primary">Conferir calendário antes de repetir →</Link>}
-    <footer className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" disabled={pending} onClick={onClose} className={secondary}>Cancelar</button><button type="submit" disabled={pending || loading || loadError || uncertain || inlineMeal} className={`rounded-control px-4 py-2 text-sm font-medium disabled:opacity-50 ${isDelete ? "bg-danger text-surface" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}>{pending ? "Salvando…" : successful.length ? "Tentar apenas pendentes" : isDelete ? "Confirmar" : "Salvar"}</button></footer>
+    <footer className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" disabled={pending} onClick={onClose} className={secondary}>Cancelar</button><button type="submit" disabled={pending || loading || loadError || periodsLoading || periodsFailed || uncertain || inlineMeal} className={`rounded-control px-4 py-2 text-sm font-medium disabled:opacity-50 ${isDelete ? "bg-danger text-surface" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}>{pending ? "Salvando…" : successful.length ? "Tentar apenas pendentes" : isDelete ? "Confirmar" : "Salvar"}</button></footer>
   </form>;
 }
