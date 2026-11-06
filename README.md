@@ -57,7 +57,7 @@ Private .env files, .ai/, tests, and local dependencies are excluded from the bu
 ### Updates
 
 ```sh
-docker compose up -d --build
+docker compose up -d --build 
 ```
 
 FOODIST_TAG identifies the image; this internal name is retained for compatibility. To return to an existing image, use FOODIST_TAG=v1 docker compose up -d --no-build. To stop the service, run docker compose down.
