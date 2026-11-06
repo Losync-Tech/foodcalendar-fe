@@ -113,6 +113,7 @@ jobs:
               target.chmod(0o600)
           PY
       - name: Deploy or rollback
+        shell: bash
         run: |
           SSH=(ssh -i "$HOME/.ssh/deploy_key" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts")
           if [[ "$OPERATION" == deploy ]]; then
