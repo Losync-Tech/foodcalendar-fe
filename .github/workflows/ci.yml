@@ -27,6 +27,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:deploy
+      - run: docker network create yummy-shared
       - run: pnpm test:docker
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

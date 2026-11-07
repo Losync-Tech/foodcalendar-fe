@@ -6,6 +6,9 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
+    networks:
+      - default
+      - yummy-shared
     environment:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
@@ -23,3 +26,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+networks:
+  yummy-shared:
+    external: true
