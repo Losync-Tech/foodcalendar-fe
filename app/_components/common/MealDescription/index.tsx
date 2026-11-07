@@ -1,5 +1,19 @@
 export function MealDescription({ description, className }: { description: string; className?: string }) {
-  const items = description.split(",").map(item => item.trim()).filter(Boolean);
+  const segments: string[] = [];
+  let depth = 0;
+  let start = 0;
+
+  for (let index = 0; index < description.length; index++) {
+    const character = description[index];
+    if (character === "(") depth++;
+    if (character === ")" && depth > 0) depth--;
+    if (character === "," && depth === 0) {
+      segments.push(description.slice(start, index));
+      start = index + 1;
+    }
+  }
+  segments.push(description.slice(start));
+  const items = segments.map(item => item.trim()).filter(Boolean);
 
   if (!items.length) return null;
 
