@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { mutate, ClientApiError } from "@/lib/api/client";
 import { formatDate, parseDate, shiftDays, todayInSaoPaulo } from "@/lib/calendar";
@@ -45,7 +45,13 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   const [successful, setSuccessful] = useState<string[]>([]);
   const [uncertain, setUncertain] = useState(false);
   const [successDate, setSuccessDate] = useState(request.date ?? todayInSaoPaulo());
+  const [mealsSaved, setMealsSaved] = useState(0);
+  const nameInput = useRef<HTMLInputElement>(null);
   const frozen = pending || successful.length > 0;
+
+  useEffect(() => {
+    if (mealsSaved > 0 && !pending) nameInput.current?.focus();
+  }, [mealsSaved, pending]);
 
   useEffect(() => {
     if (!(isPlan || kind === "clone")) return;
@@ -132,6 +138,7 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || uncertain || periodsLoading || periodsFailed) return;
+    const saveAndCreate = kind === "meal" && (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") === "save-and-create";
     setErrors({});
     if ((kind === "user" || kind === "edit-user" || kind === "meal") && (!name.trim() || name.length > 255 || (kind === "meal" && !description.trim()))) { setErrors({ form: "Preencha os campos obrigatórios; o nome deve ter até 255 caracteres." }); return; }
     if ((isPlan || kind === "clone") && (!people.length || !parseDate(start) || !parseDate(finalEnd) || start > finalEnd)) { setErrors({ form: "Selecione ao menos uma pessoa e um período válido." }); return; }
@@ -172,7 +179,14 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
         const resource = kind === "delete-user" ? "/users/" + request.user!.id : kind === "delete-meal" ? "/meals/" + request.meal!.id : "/meal-plans/" + plan!.id;
         await mutate(resource, "DELETE");
       }
-      setDone(true); onChanged();
+      if (saveAndCreate) {
+        setName("");
+        setDescription("");
+        setMealsSaved(count => count + 1);
+      } else {
+        setDone(true);
+      }
+      onChanged();
     } catch (error) { showError(error); } finally { busy(false); }
   }
   function label(key: string, text: string, control: React.ReactNode) {
@@ -180,12 +194,13 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   }
   if (done) return <div className="space-y-4 p-5"><p role="status" className="text-sm text-success">Operação concluída.</p>{(isPlan || kind === "clone") && <Link onClick={onClose} href={`/?date=${successDate}&view=week${people.length === 1 ? "&userId=" + people[0] : ""}`} className="block rounded-control text-sm font-medium text-primary">Ver no calendário →</Link>}<button type="button" onClick={onClose} className={secondary}>Concluir</button></div>;
   return <form onSubmit={submit} className="space-y-4 p-5">
+    {mealsSaved > 0 && <p role="status" className="text-sm text-success">Refeições salvas nesta sessão: {mealsSaved}.</p>}
     {loading && <p role="status" className="text-sm text-muted-foreground">Carregando opções…</p>}
     {periodsLoading && <p role="status" className="text-sm text-muted-foreground">Carregando períodos…</p>}
     {periodsFailed && <p role="alert" className="text-sm text-danger">Não foi possível carregar os períodos. Feche e abra o formulário para tentar novamente.</p>}
     {loadError && <p role="alert" className="text-sm text-danger">Não foi possível carregar as opções. Feche e abra o formulário para tentar novamente.</p>}
     <fieldset disabled={frozen || loading || loadError || uncertain} className="space-y-4 disabled:opacity-70">
-      {(kind === "user" || kind === "edit-user" || kind === "meal") && label("name", "Nome", <input id={id+"name"} className={inputClass} value={name} onChange={event => setName(event.target.value)} placeholder={kind === "meal" ? "Ex.: Pão com ovos mexidos" : "Ex.: Ana"} maxLength={255} required autoFocus />)}
+      {(kind === "user" || kind === "edit-user" || kind === "meal") && label("name", "Nome", <input ref={nameInput} id={id+"name"} className={inputClass} value={name} onChange={event => setName(event.target.value)} placeholder={kind === "meal" ? "Ex.: Pão com ovos mexidos" : "Ex.: Ana"} maxLength={255} required autoFocus />)}
       {kind === "meal" && label("description", "Descrição", <textarea id={id+"description"} className={inputClass} placeholder="Ex.: Pão integral, ovos mexidos e café." rows={4} value={description} onChange={event => setDescription(event.target.value)} required />)}
       {(isPlan || kind === "clone") && <>
         <fieldset><legend className="mb-2 text-xs font-medium">Para quem?</legend><div className="flex flex-wrap gap-2">
@@ -216,6 +231,6 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
     {Object.entries(errors).filter(([key]) => !["form", "message"].includes(key)).map(([key, text]) => <p key={key} className="text-xs text-danger">{text}</p>)}
     {errors.form && <p role="alert" className="text-sm text-danger">{errors.form}</p>}
     {uncertain && <Link href={`/?date=${start}`} onClick={onClose} className="block text-sm text-primary">Conferir calendário antes de repetir →</Link>}
-    <footer className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" disabled={pending} onClick={onClose} className={secondary}>Cancelar</button><button type="submit" disabled={pending || loading || loadError || periodsLoading || periodsFailed || uncertain || inlineMeal} className={`rounded-control px-4 py-2 text-sm font-medium disabled:opacity-50 ${isDelete ? "bg-danger text-surface" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}>{pending ? "Salvando…" : successful.length ? "Tentar apenas pendentes" : isDelete ? "Confirmar" : "Salvar"}</button></footer>
+    <footer className="flex flex-wrap justify-end gap-2 border-t border-border pt-4"><button type="button" disabled={pending} onClick={onClose} className={secondary}>Cancelar</button><button type="submit" disabled={pending || loading || loadError || periodsLoading || periodsFailed || uncertain || inlineMeal} className={`rounded-control px-4 py-2 text-sm font-medium disabled:opacity-50 ${isDelete ? "bg-danger text-surface" : "bg-primary text-primary-foreground hover:bg-primary-hover"}`}>{pending ? "Salvando…" : successful.length ? "Tentar apenas pendentes" : isDelete ? "Confirmar" : "Salvar"}</button>{kind === "meal" && <button type="submit" value="save-and-create" disabled={pending || uncertain} className={secondary}>Salvar e criar nova</button>}</footer>
   </form>;
 }
