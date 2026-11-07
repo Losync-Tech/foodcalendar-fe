@@ -31,8 +31,9 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   const [people, setPeople] = useState<string[]>(plan ? [String(plan.user.id)] : request.userId ? [request.userId] : []);
   const [mealId, setMealId] = useState(String(plan?.meal.id ?? request.meal?.id ?? ""));
   const [type, setType] = useState(plan?.mealType ?? request.mealType ?? "LUNCH");
-  const [start, setStart] = useState(plan?.startDate ?? request.date ?? todayInSaoPaulo());
-  const [end, setEnd] = useState(plan?.endDate ?? request.date ?? todayInSaoPaulo());
+  const [initialDate] = useState(todayInSaoPaulo);
+  const [start, setStart] = useState(plan?.startDate ?? initialDate);
+  const [end, setEnd] = useState(plan?.endDate ?? initialDate);
   const [repeat, setRepeat] = useState(!!plan && plan.startDate !== plan.endDate);
   const [days, setDays] = useState<string[]>(plan?.targetDays ?? ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]);
   const [origin, setOrigin] = useState("");
@@ -44,7 +45,7 @@ export function WorkflowForm({ request, onClose, onBusy, onChanged }: WorkflowFo
   const [done, setDone] = useState(false);
   const [successful, setSuccessful] = useState<string[]>([]);
   const [uncertain, setUncertain] = useState(false);
-  const [successDate, setSuccessDate] = useState(request.date ?? todayInSaoPaulo());
+  const [successDate, setSuccessDate] = useState(initialDate);
   const [mealsSaved, setMealsSaved] = useState(0);
   const nameInput = useRef<HTMLInputElement>(null);
   const frozen = pending || successful.length > 0;

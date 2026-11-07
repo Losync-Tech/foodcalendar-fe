@@ -12,6 +12,6 @@ export function DayCell({ date, userId, today, selected, inMonth, plans, href, i
       <span className={`flex size-7 items-center justify-center rounded-full text-sm ${date === today ? "bg-primary font-semibold text-primary-foreground" : selected ? "bg-primary-muted font-semibold text-primary-muted-foreground" : inMonth ? "text-foreground" : "text-muted-foreground"}`}>{Number(date.slice(-2))}</span>
     </Link>
     <ul className="space-y-1">{plans.map(plan => <li key={plan.id}><MealCard plan={plan} date={date} variant="compact" /></li>)}</ul>
-    {plans.length === 0 && <WorkflowTrigger request={{ kind: "plan", date, userId: userId ?? undefined }} className="block rounded px-1 text-sm text-primary">{incomplete ? "Dados incompletos · Adicionar" : "+ Adicionar refeição"}</WorkflowTrigger>}
+    {plans.length === 0 && <WorkflowTrigger request={{ kind: "plan", userId: userId ?? undefined }} className="block rounded px-1 text-sm text-primary">{incomplete ? "Dados incompletos · Adicionar" : "+ Adicionar refeição"}</WorkflowTrigger>}
   </td>;
 }

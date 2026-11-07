@@ -7,7 +7,6 @@ export interface WorkflowRequest {
   user?: User;
   meal?: Meal;
   plan?: MealPlan;
-  date?: string;
   mealType?: MealType;
   userId?: string;
 }
