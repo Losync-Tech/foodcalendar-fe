@@ -2,6 +2,17 @@
 
 A personal meal planner for couples, built with Next.js App Router, React, TypeScript, Tailwind CSS, and Framer Motion. When API_BASE_URL is configured, all data is read from and written to the external Food Calendar API. When it is missing or blank, the application automatically displays demo data, including in production.
 
+## Features
+
+- Plan meals on a shared calendar and manage the people you cook for.
+- Create and search meals in the catalog. Use **Salvar e criar nova** to save a meal and immediately start another.
+- Write descriptions as comma-separated text. The frontend displays each item as a bullet and keeps commas inside parentheses within the same item.
+- Schedule recurring meals and copy an existing period.
+
+## Credits
+
+Backend development by [lannavx](https://github.com/lannavx). The API source is available in the [Food Calendar API repository](https://github.com/lannavx/food-calendar-api).
+
 ## Setup
 
 Requires Node.js 24 and pnpm 12.11.2.
@@ -31,7 +42,7 @@ Add people in Settings, create meals, and schedule them in the calendar. In API 
 
 ## API contract
 
-The API uses JSON and exposes /v1/users, /v1/meals, and /v1/meal-plans. The backend lives in a separate repository. Dates are calendar dates (YYYY-MM-DD), without times. Meal types are BREAKFAST, LUNCH, SNACK, DINNER, and DESSERT. The current contract does not provide authentication, nutrients, or structured ingredients.
+The API uses JSON and exposes /v1/users, /v1/meals, and /v1/meal-plans. Dates are calendar dates (YYYY-MM-DD), without times. Meal types are BREAKFAST, LUNCH, SNACK, DINNER, and DESSERT. The current contract does not provide authentication, nutrients, or structured ingredients.
 
 The integration follows the supplied backend README. Validation against a live backend still requires an available external environment.
 
@@ -57,7 +68,7 @@ Private .env files, .ai/, tests, and local dependencies are excluded from the bu
 ### Updates
 
 ```sh
-docker compose up -d --build 
+docker compose up -d --build
 ```
 
 FOODIST_TAG identifies the image; this internal name is retained for compatibility. To return to an existing image, use FOODIST_TAG=v1 docker compose up -d --no-build. To stop the service, run docker compose down.
