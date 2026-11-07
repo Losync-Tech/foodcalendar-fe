@@ -1,4 +1,5 @@
 import { mealCategories } from "@/lib/meals";
+import { MealDescription } from "../../../../common/MealDescription";
 import { MealTrigger } from "../../../../common/MealTrigger";
 import { MealTypeIcon } from "../../../../common/MealTypeIcon";
 import type { MealCardProps } from "./types";
@@ -24,7 +25,7 @@ export function MealCard({ plan, date, variant = "default" }: MealCardProps) {
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className={compact ? "whitespace-normal break-words text-sm font-medium leading-5" : "text-sm font-medium leading-5"}>{plan.meal.name}</span>
         {!compact && <span className="text-sm leading-5">{plan.user.name}</span>}
-        {detailed && <span className="mt-1 text-sm leading-5 text-foreground">{plan.meal.description}</span>}
+        {detailed && <MealDescription description={plan.meal.description} className="mt-1 text-sm leading-5 text-foreground" />}
       </span>
     </MealTrigger>
   );

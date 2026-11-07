@@ -1,4 +1,5 @@
 "use client";
+import { MealDescription } from "../../../MealDescription";
 import { motion } from "framer-motion";
 import { MealTrigger } from "../../../MealTrigger";
 import { lockPageScroll } from "@/lib/scroll-lock";
@@ -172,7 +173,7 @@ export function Search({ date, userId, navigation, onRetryDay }: SearchProps) {
             <ul className="space-y-1">{current?.meals.slice(0, 30).map((meal) => <li key={meal.id}>
               <MealTrigger meal={meal} searchResult onOpen={close} className="flex w-full items-center gap-3 rounded-control px-3 py-3 text-left hover:bg-surface-muted focus-visible:bg-primary-muted">
                 <span className="rounded-control bg-accent-muted p-2 text-accent"><ForkKnifeIcon size={20} aria-hidden="true" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{meal.name}</span><span className="block truncate text-xs text-muted-foreground">{meal.description}</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{meal.name}</span><MealDescription description={meal.description} className="text-xs text-muted-foreground" /></span>
                 <ArrowRightIcon size={16} aria-hidden="true" className="text-muted-foreground" />
               </MealTrigger>
             </li>)}</ul>

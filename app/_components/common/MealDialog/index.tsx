@@ -8,6 +8,7 @@ import { mealCategories } from "@/lib/meals";
 import { formatDate } from "@/lib/calendar";
 import { lockPageScroll } from "@/lib/scroll-lock";
 import { trapDialogFocus } from "@/lib/dialog";
+import { MealDescription } from "../MealDescription";
 import { useWorkflow } from "../Workflow";
 import { MealForm } from "./parts/MealForm";
 import type { MealDialogContextValue, MealDialogProps, MealSelection } from "./types";
@@ -73,7 +74,7 @@ export function MealDialogProvider({ children }: MealDialogProps) {
         <div className={`mb-5 rounded-card p-5 ${category?.color ?? "bg-surface-muted text-foreground"}`}>
           <div className="mb-3 flex items-center gap-2 text-xs font-medium"><ForkKnifeIcon size={20} aria-hidden="true" /><span>{category?.label ?? "Refeição"}</span></div>
           <h3 className="text-xl font-semibold tracking-tight">{selection.meal.name}</h3>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{selection.meal.description}</p>
+          <MealDescription description={selection.meal.description} className="mt-3 text-sm leading-6" />
           {(selection.context?.userName || selection.context?.date) && <p className="mt-4 text-xs">{[selection.context.userName, selection.context.date ? formatDate(selection.context.date, { day: "numeric", month: "long", year: "numeric" }) : null].filter(Boolean).join(" · ")}</p>}
         </div>
         {editing ? <MealForm key={selection.meal.id} meal={selection.meal} onCancel={() => setEditing(false)} onBusyChange={setBusy} onSaved={meal => {
